@@ -248,7 +248,7 @@ plotCircular(area1=a_1, area2=a_2, scale=0.76, pt = 0.82, str_cen = "MRS",
 ### Multivariate plots ###
 
 lab = c("CWBM model (G) (1 in 20)", "GCB (C) model (1 in 20)", "GCB (F) model (1 in 20)", "CWBM (G) model (1 in 100)", "GCB (C) model (1 in 100)", "GCB (F) model (1 in 100)", "CWBM (G) model (1 in 200)", "GCB (C) model (1 in 200)", "GCB (F) model (1 in 200)")
-a_1 = c(75.67, 75.67, 75.69, 188.72, 189.67, 189.60,270.56, 234.01, 270.57)
+a_1 = c(75.67, 75.67, 69.21, 188.72, 111.48, 111.30, 270.56, 135.77, 135.77)
 a_2 = c(34.49, 53.13, 51.33, 40.55, 66.13, 64.36, 44.64, 72.96, 75.26)
 
 plotCircular(area1=a_1, area2=a_2, scale=0.7, pt = 0.78, str_cen = "MRS (OR)",
@@ -256,7 +256,7 @@ plotCircular(area1=a_1, area2=a_2, scale=0.7, pt = 0.78, str_cen = "MRS (OR)",
              auto.legend=list(labels=c("P1","P2"), title="TH"),centrecirc = 0.1, inlab = TRUE, incex = 0.9 ,inscale = 0.8,
              main="Scenario comparison for the time series T_MRS", insrt = 10)
 
-a_1 = c(23.74, 23.34, 22.93, 24.52, 24.07, 23.87, 24.74, 24.32, 24.09)
+a_1 = c(23.74, 20.99, 23.58, 24.52, 23.33, 23.23, 24.74, 24.09, 27.03)
 a_2 = c(19.45, 18.25, 18.84, 20.99, 20.97, 21.89, 22.05, 22.03, 23.05)
 
 plotCircular(area1=a_1, area2=a_2, scale=0.5, pt = 0.75, str_cen = "MRS (AND)",
@@ -265,7 +265,7 @@ plotCircular(area1=a_1, area2=a_2, scale=0.5, pt = 0.75, str_cen = "MRS (AND)",
              main="Scenario comparison for the time series T_MRS", insrt = 5)
 
 
-a_1 = c(5682.65, 5682.65, 5682.65, 6054.54, 6054.54, 6054.54, 6186.18, 6186.18, 6186.18)
+a_1 = c(5682.65, 5682.65, 5651.26, 6054.54, 6054.54, 6054.54, 6186.18, 6186.19, 6186.18)
 a_2 = c(5395.05, 5041.63, 5041.63, 6634.02, 6208.54, 6208.54, 6934.77, 6869.81, 6869.81)
 
 plotCircular(area1=a_1, area2=a_2, scale=0.55, pt = 0.75, str_cen = "MRD (OR)",
@@ -273,8 +273,8 @@ plotCircular(area1=a_1, area2=a_2, scale=0.55, pt = 0.75, str_cen = "MRD (OR)",
              auto.legend=list(labels=c("P1","P2"), title="TH"),centrecirc = 0.1, inlab = TRUE, incex = 1 ,inscale = 0.83,
              main="Scenario comparison for the time series T_MRD", insrt = 0)
 
-a_1 = c(4048.76, 4066.31, 4114.17, 4537.42, 4546.41, 4569.30, 4721.31, 4726.90, 4749.68)
-a_2 = c(2990.54, 2893.40, 2976.69, 3728.82, 3282.89, 3411.14, 3437.95, 3437.95, 3575.97)
+a_1 = c(4048.76, 3699.13, 4087.05, 4537.42, 4176.42, 4597.58, 4721.31, 4365.90, 4779.14)
+a_2 = c(2990.54, 2893.40, 2976.69, 3728.82, 3283.89, 3411.14, 3437.95, 3437.95, 3575.97)
 
 plotCircular(area1=a_1, area2=a_2, scale=0.55, pt = 0.77, str_cen = "MRD (AND)",
              labels=lab, stats = FALSE, dp=0, lines=TRUE, pieces.col=c("green","red"), inunit = "",
