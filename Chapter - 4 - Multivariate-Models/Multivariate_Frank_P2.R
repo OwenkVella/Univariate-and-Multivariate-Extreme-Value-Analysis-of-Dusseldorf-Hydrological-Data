@@ -139,7 +139,6 @@ newdata_2[,2] = pevd(newdata_2[,2], loc = fit_mle_2$estimate[1], scale = fit_mle
 
 #Computes the Kendall's tau to obtain the parameter of the Gumbel copula
 ken = cor(newdata_2[,1], newdata_2[,2], method = "kendall")
-par_clay = 2/((1/ken) - 1)
 par_fran = franktau(ken)
 
 #IFM fit
@@ -211,7 +210,7 @@ FR = function(u, v, para){
   
 }
 "Fcop" = function(u,v, ...) { asCOP(u,v, f = FR, ...) }
-T = 200
+T = 100
 q = T2prob(T)
 T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #And case
 T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #Or Case
@@ -306,7 +305,7 @@ segments(lty = "dotted", y0 = -10, x1 = which(newdata_4[,4] == max(newdata_4[,4]
 segments(lty = "dotted", y1 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4], x0 = which(newdata_4[,4] == max(newdata_4[,4])), x1 = -10, y0 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4])
 
 #To calculate the confidence intervals of the RP estimate
-CI = function(data, ts, zquant = NA){
+CI = function(data, ts){
   
   newdata = data.frame("V1" = as.numeric(), "V2" = as.numeric())
   names(newdata) = names(data)[c(2,3)]
@@ -332,7 +331,7 @@ CI = function(data, ts, zquant = NA){
   fit.gamma = fitCopula(frankCopula(), newdata_2, method = "ml")
   mycopula = frankCopula(param = fit.gamma@estimate, dim = 2)
   
-  #Return period GHcop, GLcop, HR, tEV
+  #Return period 
   FR = function(u, v, para){
     
     return((-1/para)*(log(1+(((exp(-para*u)-1)*(exp(-para*v) - 1))/(exp(-para) - 1)))))
@@ -392,15 +391,7 @@ CI = function(data, ts, zquant = NA){
   }
   
   #Obtain elements of the danger zone according to a level z = 0.08/0.23
-  if(is.na(zquant) == TRUE){
-    
-    z = rt_coop
-    
-  }else{
-    
-    z = zquant
-    
-  }
+  z = rt_coop
   x = seq(0, 1, by = 0.001)
   y = rep(0, length(x))
   for(i in 1:length(x)){y[i] = invphigumbel(phigumbel(z, alpha = fit.gamma@estimate) - phigumbel(x[i], alpha = fit.gamma@estimate), fit.gamma@estimate)}
@@ -432,7 +423,6 @@ CI = function(data, ts, zquant = NA){
   
 }
 rep = 1000
-zquantt = 0.974
 mat_CI = matrix(nrow = rep, ncol = 2)
 for(jj in 1:rep){
   
@@ -440,7 +430,7 @@ for(jj in 1:rep){
     
     print(jj)
     
-    boot_CI = CI(seldata, ts = T, zquant = zquantt)
+    boot_CI = CI(seldata, ts = T)
     mat_CI[jj,1] = as.numeric(boot_CI[1])
     mat_CI[jj,2] = as.numeric(boot_CI[2])
     
@@ -512,7 +502,7 @@ segments(lty = "dotted", y0 = -10, x1 = which(newdata_4[,4] == max(newdata_4[,4]
 segments(lty = "dotted", y1 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4], x0 = which(newdata_4[,4] == max(newdata_4[,4])), x1 = -10, y0 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4])
 
 #To calculate the confidence intervals of the RP estimate
-CI = function(data, ts, zquant = NA){
+CI = function(data, ts){
   
   newdata = data.frame("V1" = as.numeric(), "V2" = as.numeric())
   names(newdata) = names(data)[c(2,3)]
@@ -523,45 +513,56 @@ CI = function(data, ts, zquant = NA){
     
   }
   
-  #Fitting the GEV distribution to the columns separately
-  fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
-  fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
+  #Fitting the GEV/GP distribution to the columns separately
+  fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE, shape = 0)
+  fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE, shape = 0)
   
   #Probability transformation of the component-wise maxima sample
   newdata_2 = newdata
-  newdata_2[,1] = revd(length(newdata_2[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
-  newdata_2[,2] = revd(length(newdata_2[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
-  newdata_2[,1] = pevd(newdata_2[,1], fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
-  newdata_2[,2] = pevd(newdata_2[,2], fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
+  newdata_2[,1] = revd(length(newdata_2[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],0)
+  newdata_2[,2] = revd(length(newdata_2[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],0)
+  newdata_2[,1] = pevd(newdata_2[,1], fit_mle_1$estimate[1],fit_mle_1$estimate[2],0)
+  newdata_2[,2] = pevd(newdata_2[,2], fit_mle_2$estimate[1],fit_mle_2$estimate[2],0)
   
   #IFM fit
-  fit.beta = fitCopula(frankCopula(), newdata_2, method = "ml")
+  fit.gamma = fitCopula(frankCopula(), newdata_2, method = "ml")
   mycopula = frankCopula(param = fit.gamma@estimate, dim = 2)
   
-  #Return period GHcop, GLcop, HR, tEV
-  #q = 1-1/500
-  z = rt_dual
-  q = T2prob(ts)
-  T_dual = lmomco::prob2T(duCOP(q,q, cop = GHcop, para = fit.beta@estimate)) #And case
-  T_coop = lmomco::prob2T(COP(q,q, cop = GHcop, para = fit.beta@estimate)) #Or Case
+  #Return period
+  FR = function(u, v, para){
+    
+    return((-1/para)*(log(1+(((exp(-para*u)-1)*(exp(-para*v) - 1))/(exp(-para) - 1)))))
+    
+  }
+  "Fcop" = function(u,v, ...) { asCOP(u,v, f = FR, ...) }
+  T = ts
+  q = T2prob(T)
+  T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #And case
+  T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #Or Case
+  q_dual =  T2prob(T_dual)
+  q_coop =  T2prob(T_coop)
   
   #To obtain the required q to acquire the exact T period for the OR case
   Rt_coop = function(q, alpha, rt){
     
-    #return(invphigumbel(phigumbel(u_1,alpha) + phigumbel(u_2,alpha), alpha))
-    return(exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
+    #return(exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
+    #return((max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
+    return((-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
     
   }
-  rt_coop = uniroot(Rt_coop, interval = c(0,1), alpha = fit.beta@estimate, rt = ts)$root
+  rt_coop = uniroot(Rt_coop, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
+  lmomco::prob2T(COP(rt_coop, rt_coop, cop = Fcop, para = fit.gamma@estimate))
   
   #To obtain the required q to acquire the exact T period for the OR case
   Rt_dual = function(q, alpha, rt){
     
-    #return(invphigumbel(phigumbel(u_1,alpha) + phigumbel(u_2,alpha), alpha))
-    return(2*q - exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
+    #return(2*q - exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
+    #return(2*q - (max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
+    return(2*q - (-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
     
   }
-  rt_dual = uniroot(Rt_dual, interval = c(0,1), alpha = fit.beta@estimate, rt = ts)$root
+  rt_dual = uniroot(Rt_dual, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
+  lmomco::prob2T(duCOP(rt_dual, rt_dual, cop = Fcop, para = fit.gamma@estimate))
   
   #Define the Gumbel and the corresponding generator
   gumbel = function(u_1, u_2, alpha){
@@ -587,38 +588,45 @@ CI = function(data, ts, zquant = NA){
   }
   
   #Obtain elements of the danger zone according to a level z = 0.08/0.23
-  z = rt_coop
+  z = rt_dual
   x = seq(0, 1, by = 0.001)
   y = rep(0, length(x))
-  for(i in 1:length(x)){y[i] = invphigumbel(phigumbel(z, alpha = fit.beta@estimate) - phigumbel(x[i], alpha = fit.beta@estimate), fit.beta@estimate)}
-  
-  mat = na.omit(cbind(x, y, gumbel(x,y, alpha = fit.beta@estimate)))
-  if(!identical(which((mat[,1] > 1 | mat[,1] < 0) | (mat[,2] > 1 | mat[,2] < 0)), integer(0))){
+  dual = function(u, v, s, alpha){
     
-    mat = mat[-which((mat[,1] > 1 | mat[,1] < 0) | (mat[,2] > 1 | mat[,2] < 0)),]
+    - u - v + gumbel(u, v, alpha) + s
     
   }
+  for(t in 1:length(y)){
+    
+    tryCatch({
+      
+      y[t] = uniroot(dual, interval = c(0, 1), v = x[t] , s = z, alpha = fit.gamma@estimate)$root
+      
+    }, error=function(e){})
+    
+  }
+  mat = na.omit(cbind(x, y, x + y - gumbel(x, y, alpha = fit.gamma@estimate)))
+  mat = mat[-which(mat[,1] == 0 | mat[,1] == 1 | mat[,2] == 0 | mat[,2] == 1),]
+  
   
   #Most-Likely Design
-  mat = mat[-which(mat[,1] == 0 | mat[,1] == 1 | mat[,2] == 0 | mat[,2] == 1),]
   newdata_4 = cbind(mat, rep(0, length(mat[,1])))
   for(j in 1:length(mat[,1])){
     
-    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2], fit_mle_1$estimate[3])
+    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],0)*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], 0)
     
   } 
   colnames(newdata_4)[3:4] = c("c", "ML")
   
   pt = TRUE
   newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),]
-  dd=qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
-  rttt=qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
+  dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV")
+  rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV")
   
   return(c(dd,rttt))
   
 }
 rep = 1000
-zquantt = 0.974
 mat_CI = matrix(nrow = rep, ncol = 2)
 for(jj in 1:rep){
   
