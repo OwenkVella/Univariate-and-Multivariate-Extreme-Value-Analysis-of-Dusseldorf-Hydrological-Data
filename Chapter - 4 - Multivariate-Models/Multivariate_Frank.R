@@ -7,6 +7,7 @@
 lapply(c("tcltk", "lubridate", "dplyr", "tidyr", "pastecs", "extRemes", "svDialogs", "fExtremes", "evd", "copula", "RcppRoll"), require, character.only = TRUE)
 lapply(c("ismev", "VGAM", "SciViews", "lmomco", "copBasic", "hexbin", "scatterplot3d", "rgl", "graphics", "gumbel", "SuppDists", "openxlsx"), require, character.only = TRUE)
 lapply(c("remotes", "ggplot2", "viridis","ggExtra", "gridExtra", "kit", "eva", "zoo", "VineCopula", "POT", "stringr", "plotrix", "mev", "logspline"), require, character.only = TRUE)
+remotes::install_github("AlexanderRitz/copR")
 
 #To clean
 rm(list = ls())
@@ -107,7 +108,8 @@ ggMarginal(p, type="boxplot", fill = "#0099f8")
 #ggMarginal(p, type="histogram", fill = "#0099f8")
 
 #Select the data to work with (df/P1_df/P2_df) and the variables (i.e. Date (2) and Mean Discharge (3) or Summation Total Water (4))
-seldata = P1_df[,c(2,3,4,1)]
+seldata = P2_df[,c(2,3,4,1)]
+point = "P2"
 
 #------------------ Done ~ Fitting Distribution  -----------------
 
@@ -123,64 +125,52 @@ for(i in 1:length(unique(seldata$hydroYear))){
   
 }
 
-hk = rbind(cbind(seldata[, c(2,3)],"G" = 1), cbind(newdata, "G" = 2), cbind(intersect(newdata, seldata[,c(2,3)]),"G" = 3))
-hk$G = as.factor(hk$G)
-p1 = ggplot(hk, aes(x = MRS, y = MRD, colour = G)) + geom_point() + theme_bw()+ theme(legend.position = "none") + scale_color_manual(values = c("black","red", "green"))
-ggMarginal(p1, type="boxplot", fill = "#0099f8") 
-
-#To plot a matrix of scatter plots
-upper.panel = function(x, y){
-  points(x,y, pch = 19)
+#Fitting the GEV distribution to the columns separately
+if(point == "P2"){
+  
+  fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE, shape = 0)
+  fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE, shape = 0)
+  
+}else{
+  
+  fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
+  fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
+  
 }
-panel.hist = function(x, ...){
-  usr = par("usr"); on.exit(par("usr"))
-  par(usr = c(usr[1:2], 0, 1.5) )
-  h = hist(x, plot = FALSE)
-  breaks = h$breaks; nB = length(breaks)
-  y = h$counts; y = y/max(y)
-  rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
-}
-panel.cor = function(x, y){
-  usr = par("usr"); on.exit(par("usr"))
-  par(usr = c(0, 1, 0, 1))
-  r = round(kendall.tau(x, y), digits=2)
-  t = round(cor(x, y, method = "pearson"), digits=2)
-  txt = bquote(tau == .(round(r,2)))
-  txt_1 = bquote(rho == .(round(t,2)))
-  cex.cor = 0.8/strwidth(txt)
-  text(0.5, 0.6, txt_1, cex = 2.5)
-  text(0.5, 0.4, txt, cex = 2.5)
-}
-pairs(newdata, lower.panel = panel.cor,  upper.panel = upper.panel,diag.panel=panel.hist)
-
-#Fitting the GEV/GP distribution to the columns separately
-fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
-fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
 
 #Univariate Estimates
 fit_mle_1$estimate
 fit_mle_2$estimate
 
 #Probability transformation of the component-wise maxima sample
-newdata_2 = matrix(nrow = dim(newdata)[1], ncol = 2)
-newdata_2[,1] = pevd(newdata[,1], fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
-newdata_2[,2] = pevd(newdata[,2], fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
+newdata_2 = newdata
+if(point == "P2"){
+  
+  newdata_2[,1] = pevd(newdata_2[,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0)
+  newdata_2[,2] = pevd(newdata_2[,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0)
+  
+}else{
+  
+  newdata_2[,1] = pevd(newdata[,1], fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
+  newdata_2[,2] = pevd(newdata[,2], fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
+  
+}
 
-#Computes the Kendall's tau to obtain the parameter of the Gumbel copula
+#Computes the Kendall's tau to obtain the parameter of the Frank copula
 ken = cor(newdata_2[,1], newdata_2[,2], method = "kendall")
 par_fran = franktau(ken)
 
+#IFM fit
 fit.gamma = fitCopula(frankCopula(), newdata_2, method = "ml", start = par_fran)
 fit.gamma
 
-#stats
-fit = fit.gamma
-AIC(fit)
-BIC(fit)
-confint(fit) 
-coef(fit, SE = TRUE)
+#Stats
+AIC(fit.gamma)
+BIC(fit.gamma)
+confint(fit.gamma) 
+coef(fit.gamma, SE = TRUE)
 
-#Profile likelihood for the Gumbel copula parameter estimate c("Clayton", "Frank")
+#Profile likelihood for the Frank copula parameter estimate
 opt = "Frank"
 cop = onacopulaL(opt, list(fit.gamma@estimate,1:dim(seldata)[2]))
 n = 2000
@@ -190,7 +180,7 @@ pfm = profile(efm)
 ci = confint(pfm, level=0.95)
 logL = function(x) -efm@minuslogl(x)
 logL. = Vectorize(logL)
-I = c(cop@copula@iTau(0.2), cop@copula@iTau(0.3))
+I = c(cop@copula@iTau(0.15), cop@copula@iTau(0.22))
 curve(logL., from=I[1], to=I[2], xlab=quote(theta),
       ylab="log-likelihood",
       main=paste("log-likelihood for", opt))
@@ -199,7 +189,7 @@ abline(v = ci)
 #Goodness of fit
 gofCopula(frankCopula(), newdata, N = 200, estim.method = "ml")
 
-#Graphics: Change between frankCopula and claytonCopula
+#Graphics for Frank Copula
 mycopula = frankCopula(param = fit.gamma@estimate, dim = 2)
 wireframe2(mycopula, pCopula) 
 contour(mycopula, pCopula, xlim = c(0, 1), ylim=c(0, 1), main = "Contour plot")
@@ -231,7 +221,7 @@ if(pt){
   
 }
 
-#Return period GHcop, GLcop, HR, tEV
+#Return period
 FR = function(u, v, para){
   
   return((-1/para)*(log(1+(((exp(-para*u)-1)*(exp(-para*v) - 1))/(exp(-para) - 1)))))
@@ -240,27 +230,23 @@ FR = function(u, v, para){
 "Fcop" = function(u,v, ...) { asCOP(u,v, f = FR, ...) }
 T = 100
 q = T2prob(T)
-T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #And case
-T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #Or Case
+T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #AND case
+T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #OR Case
 q_dual =  T2prob(T_dual)
 q_coop =  T2prob(T_coop)
 
 #To obtain the required q to acquire the exact T period for the OR case
 Rt_coop = function(q, alpha, rt){
   
-  #return(exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
-  #return((max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
   return((-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
   
 }
 rt_coop = uniroot(Rt_coop, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
 lmomco::prob2T(COP(rt_coop, rt_coop, cop = Fcop, para = fit.gamma@estimate))
 
-#To obtain the required q to acquire the exact T period for the OR case
+#To obtain the required q to acquire the exact T period for the AND case
 Rt_dual = function(q, alpha, rt){
   
-  #return(2*q - exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
-  #return(2*q - (max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
   return(2*q - (-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
   
 }
@@ -272,25 +258,19 @@ lmomco::prob2T(duCOP(rt_dual, rt_dual, cop = Fcop, para = fit.gamma@estimate))
 contour(mycopula, pCopula, xlim = c(0, 1), ylim = c(0, 1), main = "Contour plot", nlevels = 15, xlab = "MRD", ylab = "MRS")
 points(newdata_2[,1], newdata_2[,2], col = "black")
 
-#Define the Clayton/Frank and the corresponding generator (change the return of the functions)
-gumbel = function(u_1, u_2, alpha){
+#Define the Frank copula and the corresponding generator
+frank = function(u_1, u_2, alpha){
   
-  #return(exp(-((-log(u_1))^(alpha) + (-log(u_2))^(alpha))^(1/alpha)))
-  #return((max((u_1^(-alpha))+(u_2^(-alpha))-1,0))^(-1/alpha))
   return((-1/alpha)*(log(1+(((exp(-alpha*u_1)-1)*(exp(-alpha*u_2) - 1))/(exp(-alpha) - 1)))))
   
 }
-invphigumbel = function (t, alpha = 1){
+invphifrank = function (t, alpha = 1){
   
-  #exp(-t^(1/alpha))
-  #(1+alpha*t)^(-1/alpha)
   (-1/alpha)*(log(1+exp(-t)*(exp(-alpha)-1)))
   
 } 
-phigumbel = function (t, alpha = 1){
+phifrank = function (t, alpha = 1){
   
-  #(-log(t))^alpha
-  #(1/alpha)*((t^(-alpha)) - 1)
   -log((exp(-alpha*t)-1)/(exp(-alpha)-1))
   
 }
@@ -299,10 +279,10 @@ phigumbel = function (t, alpha = 1){
 z = rt_coop
 x = seq(0, 1, by = 0.001)
 y = rep(0, length(x))
-for(i in 1:length(x)){y[i] = invphigumbel(phigumbel(z, alpha = fit.gamma@estimate) - phigumbel(x[i], alpha = fit.gamma@estimate), fit.gamma@estimate)}
+for(i in 1:length(x)){y[i] = invphifrank(phifrank(z, alpha = fit.gamma@estimate) - phifrank(x[i], alpha = fit.gamma@estimate), fit.gamma@estimate)}
 x = x[which(y<1&y>0)]
 y = y[which(y<1&y>0)]
-mat = na.omit(cbind(x, y, gumbel(x,y, alpha = fit.gamma@estimate)))
+mat = na.omit(cbind(x, y, frank(x,y, alpha = fit.gamma@estimate)))
 if(!identical(which((mat[,1] > 1 | mat[,1] < 0) | (mat[,2] > 1 | mat[,2] < 0)), integer(0))){
   
   mat = mat[-which((mat[,1] > 1 | mat[,1] < 0) | (mat[,2] > 1 | mat[,2] < 0)),]
@@ -318,16 +298,32 @@ points(mat[,1], mat[,2], type = "l")
 newdata_4 = cbind(mat, rep(0, length(mat[,1])))
 for(j in 1:length(mat[,1])){
   
-  newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+  if(point == "P2"){
+    
+    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],0)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2],0)
+  
+  }else{
+    
+    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+    
+  }
   
 } 
 colnames(newdata_4)[3:4] = c("c", "ML")
 
 pt = TRUE
 newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),]
-qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
-qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
-
+if(point == "P2"){
+  
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"))
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"))
+  
+}else{
+  
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"))
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"))
+  
+}
 plot(newdata_4[,4], type = "l", main = paste("Most-Likely Design Function for Return Period", T, "Years"), ylab = "ML Weight Function")
 segments(lty = "dotted", y0 = -10, x1 = which(newdata_4[,4] == max(newdata_4[,4])), x0 = which(newdata_4[,4] == max(newdata_4[,4])), y1 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4])
 segments(lty = "dotted", y1 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4], x0 = which(newdata_4[,4] == max(newdata_4[,4])), x1 = -10, y0 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4])
@@ -344,20 +340,40 @@ CI = function(data, ts){
     
   }
   
-  #Fitting the GEV/GP distribution to the columns separately
-  fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
-  fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
+  #Fitting the GEV distribution to the columns separately
+  if(point == "P2"){
+    
+    fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE, shape = 0)
+    fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE, shape = 0)
+    
+  }else{
+    
+    fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
+    fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
+    
+  }
   
   #Probability transformation of the component-wise maxima sample
-  newdata_2 = matrix(nrow = dim(seldata)[1], ncol = 2)
-  newdata_2[,1] = pevd(revd(length(newdata[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
-  newdata_2[,2] = pevd(revd(length(newdata[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
+  newdata_2 = newdata
+  if(point == "P2"){
+    
+    newdata_2[,1] = revd(length(newdata_2[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],0)
+    newdata_2[,2] = revd(length(newdata_2[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],0)
+    newdata_2[,1] = pevd(newdata_2[,1], fit_mle_1$estimate[1],fit_mle_1$estimate[2],0)
+    newdata_2[,2] = pevd(newdata_2[,2], fit_mle_2$estimate[1],fit_mle_2$estimate[2],0)  
+    
+  }else{
+    
+    newdata_2[,1] = pevd(revd(length(newdata[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
+    newdata_2[,2] = pevd(revd(length(newdata[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
+    
+  }
   
   #IFM fit
   fit.gamma = fitCopula(frankCopula(), newdata_2, method = "ml")
   mycopula = frankCopula(param = fit.gamma@estimate, dim = 2)
   
-  #Return period GHcop, GLcop, HR, tEV
+  #Return period 
   FR = function(u, v, para){
     
     return((-1/para)*(log(1+(((exp(-para*u)-1)*(exp(-para*v) - 1))/(exp(-para) - 1)))))
@@ -366,52 +382,42 @@ CI = function(data, ts){
   "Fcop" = function(u,v, ...) { asCOP(u,v, f = FR, ...) }
   T = ts
   q = T2prob(T)
-  T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #And case
-  T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #Or Case
+  T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #AND case
+  T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #OR Case
   q_dual =  T2prob(T_dual)
   q_coop =  T2prob(T_coop)
   
   #To obtain the required q to acquire the exact T period for the OR case
   Rt_coop = function(q, alpha, rt){
     
-    #return(exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
-    #return((max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
     return((-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
     
   }
   rt_coop = uniroot(Rt_coop, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
   lmomco::prob2T(COP(rt_coop, rt_coop, cop = Fcop, para = fit.gamma@estimate))
   
-  #To obtain the required q to acquire the exact T period for the OR case
+  #To obtain the required q to acquire the exact T period for the AND case
   Rt_dual = function(q, alpha, rt){
     
-    #return(2*q - exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
-    #return(2*q - (max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
     return(2*q - (-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
     
   }
   rt_dual = uniroot(Rt_dual, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
   lmomco::prob2T(duCOP(rt_dual, rt_dual, cop = Fcop, para = fit.gamma@estimate))
   
-  #Define the Clayton/Frank and the corresponding generator (change the return of the functions)
-  gumbel = function(u_1, u_2, alpha){
+  #Define the Frank copula and the corresponding generator
+  frank = function(u_1, u_2, alpha){
     
-    #return(exp(-((-log(u_1))^(alpha) + (-log(u_2))^(alpha))^(1/alpha)))
-    #return((max((u_1^(-alpha))+(u_2^(-alpha))-1,0))^(-1/alpha))
-    return((-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))))
+    return((-1/alpha)*(log(1+(((exp(-alpha*u_1)-1)*(exp(-alpha*u_2) - 1))/(exp(-alpha) - 1)))))
     
   }
-  invphigumbel = function (t, alpha = 1){
+  invphifrank = function (t, alpha = 1){
     
-    #exp(-t^(1/alpha))
-    #(1+alpha*t)^(-1/alpha)
     (-1/alpha)*(log(1+exp(-t)*(exp(-alpha)-1)))
     
   } 
-  phigumbel = function (t, alpha = 1){
+  phifrank = function (t, alpha = 1){
     
-    #(-log(t))^alpha
-    #(1/alpha)*((t^(-alpha)) - 1)
     -log((exp(-alpha*t)-1)/(exp(-alpha)-1))
     
   }
@@ -420,10 +426,10 @@ CI = function(data, ts){
   z = rt_coop
   x = seq(0, 1, by = 0.001)
   y = rep(0, length(x))
-  for(i in 1:length(x)){y[i] = invphigumbel(phigumbel(z, alpha = fit.gamma@estimate) - phigumbel(x[i], alpha = fit.gamma@estimate), fit.gamma@estimate)}
+  for(i in 1:length(x)){y[i] = invphifrank(phifrank(z, alpha = fit.gamma@estimate) - phifrank(x[i], alpha = fit.gamma@estimate), fit.gamma@estimate)}
   x = x[which(y<1&y>0)]
   y = y[which(y<1&y>0)]
-  mat = na.omit(cbind(x, y, gumbel(x,y, alpha = fit.gamma@estimate)))
+  mat = na.omit(cbind(x, y, frank(x,y, alpha = fit.gamma@estimate)))
   if(!identical(which((mat[,1] > 1 | mat[,1] < 0) | (mat[,2] > 1 | mat[,2] < 0)), integer(0))){
     
     mat = mat[-which((mat[,1] > 1 | mat[,1] < 0) | (mat[,2] > 1 | mat[,2] < 0)),]
@@ -435,15 +441,33 @@ CI = function(data, ts){
   newdata_4 = cbind(mat, rep(0, length(mat[,1])))
   for(j in 1:length(mat[,1])){
     
-    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+    if(point == "P2"){
+      
+      newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],0)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2],0)
+      
+    }else{
+      
+      newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+      
+    }
     
   } 
   colnames(newdata_4)[3:4] = c("c", "ML")
   
+  pt = TRUE
   newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),]
-  dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
-  rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
-
+  if(point == "P2"){
+    
+    dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV")
+    rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV")
+    
+  }else{
+    
+    dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
+    rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
+    
+  }
+  
   return(c(dd,rttt))
   
 }
@@ -467,36 +491,13 @@ range(na.omit(mat_CI[,2]))
 
 #------------------ Done ~ Plotting Isolines / Design Event -- AND case scenario -----------------
 
-#Define the Clayton/Frank and the corresponding generator (change the return of the functions)
-gumbel = function(u_1, u_2, alpha){
-  
-  #return(exp(-((-log(u_1))^(alpha) + (-log(u_2))^(alpha))^(1/alpha)))
-  #return((max((u_1^(-alpha))+(u_2^(-alpha))-1,0))^(-1/alpha))
-  return((-1/alpha)*(log(1+(((exp(-alpha*u_1)-1)*(exp(-alpha*u_2) - 1))/(exp(-alpha) - 1)))))
-  
-}
-invphigumbel = function (t, alpha = 1){
-  
-  #exp(-t^(1/alpha))
-  #(1+alpha*t)^(-1/alpha)
-  (-1/alpha)*(log(1+exp(-t)*(exp(-alpha)-1)))
-  
-} 
-phigumbel = function (t, alpha = 1){
-  
-  #(-log(t))^alpha
-  #(1/alpha)*((t^(-alpha)) - 1)
-  -log((exp(-alpha*t)-1)/(exp(-alpha)-1))
-  
-}
-
 cc = seq(0, 1, by = 0.001)
 mat1 = matrix(0, nrow = length(cc), ncol = length(cc), byrow=TRUE)
 for(o in 1:length(cc)){
   
   for(r in 1:length(cc)){
     
-    mat1[o,r] = cc[o] + cc[r] - gumbel(cc[o], cc[r], alpha = fit.gamma@estimate)
+    mat1[o,r] = cc[o] + cc[r] - frank(cc[o], cc[r], alpha = fit.gamma@estimate)
     
   }
   
@@ -504,14 +505,13 @@ for(o in 1:length(cc)){
 contour(cc,cc,mat1, nlevels = 15, lty = 1, xlim = c(0, 1), ylim = c(0, 1), main = "Dual Contour plot", xlab = "MRD", ylab = "MRS")
 points(newdata_2[,1], newdata_2[,2], col = "black")
 
-#AND case scenario
-#Obtain elements of the danger zone according to a level 
+#AND case scenario: Obtain elements of the danger zone according to a level 
 z = rt_dual
 x = seq(0, 1, by = 0.001)
 y = rep(0, length(x))
 dual = function(u, v, s, alpha){
   
-  - u - v + gumbel(u, v, alpha) + s
+  - u - v + frank(u, v, alpha) + s
   
 }
 for(t in 1:length(y)){
@@ -523,9 +523,7 @@ for(t in 1:length(y)){
   }, error=function(e){})
   
 }
-x = x[which(y<1&y>0)]
-y = y[which(y<1&y>0)]
-mat = na.omit(cbind(x, y, x + y - gumbel(x, y, alpha = fit.gamma@estimate)))
+mat = na.omit(cbind(x, y, x + y - frank(x, y, alpha = fit.gamma@estimate)))
 mat = mat[-which(mat[,1] == 0 | mat[,1] == 1 | mat[,2] == 0 | mat[,2] == 1),]
 
 #Graphics of the contour line
@@ -536,57 +534,91 @@ points(mat[,1], mat[,2], type = "l")
 newdata_4 = cbind(mat, rep(0, length(mat[,1])))
 for(j in 1:length(mat[,1])){
   
-  newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+  if(point == "P2"){
+    
+    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],0)*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], 0)
+  
+  }else{
+    
+    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+    
+  }
   
 } 
 colnames(newdata_4)[3:4] = c("c", "ML")
 
 pt = TRUE
 newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),]
-qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
-qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
+if(point == "P2"){
+  
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"))
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"))
+  
+}else{
+  
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"))
+  print(qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"))
+  
+}
 
-plot(newdata_4[,4], type = "l", main = paste("Most-Likely Design Function for Return Period", T, "Years"), ylab = "ML Weight Function")
+plot(newdata_4[,4], type = "l", main = "Most-Likely Design")
 segments(lty = "dotted", y0 = -10, x1 = which(newdata_4[,4] == max(newdata_4[,4])), x0 = which(newdata_4[,4] == max(newdata_4[,4])), y1 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4])
 segments(lty = "dotted", y1 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4], x0 = which(newdata_4[,4] == max(newdata_4[,4])), x1 = -10, y0 = newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),4])
 
 #To calculate the confidence intervals of the RP estimate
 CI = function(data, ts){
   
-  #To obtain the annual maxima or the excess (need to amend accordingly)
   newdata = data.frame("V1" = as.numeric(), "V2" = as.numeric())
-  names(newdata) = names(seldata)[c(2,3)]
-  for(i in 1:length(unique(seldata$hydroYear))){
+  names(newdata) = names(data)[c(2,3)]
+  for(i in 1:length(unique(data$hydroYear))){
     
-    newdata[i,1] = seldata[which(seldata$hydroYear == unique(seldata$hydroYear)[i]),2][which(seldata[which(seldata$hydroYear == unique(seldata$hydroYear)[i]),2] == max(seldata[which(seldata$hydroYear == unique(seldata$hydroYear)[i]),2]))]
-    newdata[i,2] = seldata[which(seldata$hydroYear == unique(seldata$hydroYear)[i]),3][which(seldata[which(seldata$hydroYear == unique(seldata$hydroYear)[i]),3] == max(seldata[which(seldata$hydroYear == unique(seldata$hydroYear)[i]),3]))]
+    newdata[i,1] = data[which(data$hydroYear == unique(data$hydroYear)[i]),2][which(data[which(data$hydroYear == unique(data$hydroYear)[i]),2] == max(data[which(data$hydroYear == unique(data$hydroYear)[i]),2]))[1]]
+    newdata[i,2] = data[which(data$hydroYear == unique(data$hydroYear)[i]),3][which(data[which(data$hydroYear == unique(data$hydroYear)[i]),3] == max(data[which(data$hydroYear == unique(data$hydroYear)[i]),3]))[1]]
     
   }
   
-  #Fitting the GEV/GP distribution to the columns separately
-  fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
-  fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
+  #Fitting the GEV distribution to the columns separately
+  if(point == "P2"){
+    
+    fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE, shape = 0)
+    fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE, shape = 0)
+    
+  }else{
+    
+    fit_mle_1 = evd::fgev(x = newdata[,1], std.err = TRUE, corr = TRUE)
+    fit_mle_2 = evd::fgev(x = newdata[,2], std.err = TRUE, corr = TRUE)
+    
+  }
   
   #Probability transformation of the component-wise maxima sample
-  newdata_2 = matrix(nrow = dim(seldata)[1], ncol = 2)
-  newdata_2[,1] = pevd(revd(length(newdata[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
-  newdata_2[,2] = pevd(revd(length(newdata[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
-  
-  #Computes the Kendall's tau to obtain the parameter of the Gumbel copula
-  ken = cor(newdata_2[,1], newdata_2[,2], method = "kendall")
-  par_fran = franktau(ken)
+  newdata_2 = newdata
+  if(point == "P2"){
+    
+    newdata_2[,1] = revd(length(newdata_2[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],0)
+    newdata_2[,2] = revd(length(newdata_2[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],0)
+    newdata_2[,1] = pevd(newdata_2[,1], fit_mle_1$estimate[1],fit_mle_1$estimate[2],0)
+    newdata_2[,2] = pevd(newdata_2[,2], fit_mle_2$estimate[1],fit_mle_2$estimate[2],0)  
+    
+  }else{
+    
+    newdata_2[,1] = pevd(revd(length(newdata[,1]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3]), fit_mle_1$estimate[1],fit_mle_1$estimate[2],fit_mle_1$estimate[3])
+    newdata_2[,2] = pevd(revd(length(newdata[,2]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3]), fit_mle_2$estimate[1],fit_mle_2$estimate[2],fit_mle_2$estimate[3])
+    
+  }
   
   #IFM fit
   fit.gamma = fitCopula(frankCopula(), newdata_2, method = "ml")
   mycopula = frankCopula(param = fit.gamma@estimate, dim = 2)
   
+  #Return period
   FR = function(u, v, para){
     
     return((-1/para)*(log(1+(((exp(-para*u)-1)*(exp(-para*v) - 1))/(exp(-para) - 1)))))
     
   }
   "Fcop" = function(u,v, ...) { asCOP(u,v, f = FR, ...) }
-  q = T2prob(ts)
+  T = ts
+  q = T2prob(T)
   T_dual = lmomco::prob2T(duCOP(q,q, cop = Fcop, para = fit.gamma@estimate)) #And case
   T_coop = lmomco::prob2T(COP(q,q, cop = Fcop, para = fit.gamma@estimate)) #Or Case
   q_dual =  T2prob(T_dual)
@@ -595,61 +627,89 @@ CI = function(data, ts){
   #To obtain the required q to acquire the exact T period for the OR case
   Rt_coop = function(q, alpha, rt){
     
-    #return(exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
-    #return((max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
     return((-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
     
   }
-  rt_coop = uniroot(Rt_coop, interval = c(0,1), alpha = fit.gamma@estimate, rt = ts)$root
+  rt_coop = uniroot(Rt_coop, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
   lmomco::prob2T(COP(rt_coop, rt_coop, cop = Fcop, para = fit.gamma@estimate))
   
   #To obtain the required q to acquire the exact T period for the OR case
   Rt_dual = function(q, alpha, rt){
     
-    #return(2*q - exp(-((-log(q))^(alpha) + (-log(q))^(alpha))^(1/alpha)) - 1 + 1/rt)
-    #return(2*q - (max((q^(-alpha))+(q^(-alpha))-1,0))^(-1/alpha) - 1 + 1/rt)
     return(2*q - (-1/alpha)*(log(1+(((exp(-alpha*q)-1)*(exp(-alpha*q) - 1))/(exp(-alpha) - 1)))) - 1 + 1/rt)
     
   }
-  rt_dual = uniroot(Rt_dual, interval = c(0,1), alpha = fit.gamma@estimate, rt = ts)$root
+  rt_dual = uniroot(Rt_dual, interval = c(0,1), alpha = fit.gamma@estimate, rt = T)$root
   lmomco::prob2T(duCOP(rt_dual, rt_dual, cop = Fcop, para = fit.gamma@estimate))
   
-  #AND case scenario
-  #Obtain elements of the danger zone according to a level 
+  #Define the Frank copula and the corresponding generator
+  frank = function(u_1, u_2, alpha){
+    
+    return((-1/alpha)*(log(1+(((exp(-alpha*u_1)-1)*(exp(-alpha*u_2) - 1))/(exp(-alpha) - 1)))))
+    
+  }
+  invphifrank = function (t, alpha = 1){
+    
+    (-1/alpha)*(log(1+exp(-t)*(exp(-alpha)-1)))
+    
+  } 
+  phifrank = function (t, alpha = 1){
+    
+    -log((exp(-alpha*t)-1)/(exp(-alpha)-1))
+    
+  }
+  
+  #Obtain elements of the danger zone according to a level z = 0.08/0.23
   z = rt_dual
   x = seq(0, 1, by = 0.001)
   y = rep(0, length(x))
   dual = function(u, v, s, alpha){
     
-    - u - v + gumbel(u, v, alpha) + s
+    - u - v + frank(u, v, alpha) + s
     
   }
   for(t in 1:length(y)){
     
-  tryCatch({
+    tryCatch({
       
       y[t] = uniroot(dual, interval = c(0, 1), v = x[t] , s = z, alpha = fit.gamma@estimate)$root
       
     }, error=function(e){})
     
   }
-  x = x[which(y<1&y>0)]
-  y = y[which(y<1&y>0)]
-  mat = na.omit(cbind(x, y, x + y - gumbel(x, y, alpha = fit.gamma@estimate)))
+  mat = na.omit(cbind(x, y, x + y - frank(x, y, alpha = fit.gamma@estimate)))
   mat = mat[-which(mat[,1] == 0 | mat[,1] == 1 | mat[,2] == 0 | mat[,2] == 1),]
   
   #Most-Likely Design
   newdata_4 = cbind(mat, rep(0, length(mat[,1])))
   for(j in 1:length(mat[,1])){
     
-    newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+    if(point == "P2"){
+      
+      newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],0)*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], 0)
+      
+    }else{
+      
+      newdata_4[j,4] = dCopula(cbind(mat[j,1], mat[j,2]), mycopula)*devd(qevd(as.data.frame(mat)[j,1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV"), fit_mle_1$estimate[1], fit_mle_1$estimate[2],fit_mle_1$estimate[3])*devd(qevd(as.data.frame(mat)[j,2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV"), fit_mle_2$estimate[1], fit_mle_2$estimate[2], fit_mle_2$estimate[3])
+      
+    }
     
   } 
   colnames(newdata_4)[3:4] = c("c", "ML")
   
+  pt = TRUE
   newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),]
-  dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
-  rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
+  if(point == "P2"){
+    
+    dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = 0, type = "GEV")
+    rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = 0, type = "GEV")
+    
+  }else{
+    
+    dd = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),1], loc = fit_mle_1$estimate[1], scale = fit_mle_1$estimate[2], shape = fit_mle_1$estimate[3], type = "GEV")
+    rttt = qevd(newdata_4[which(newdata_4[,4] == max(newdata_4[,4])),2], loc = fit_mle_2$estimate[1], scale = fit_mle_2$estimate[2], shape = fit_mle_2$estimate[3], type = "GEV")
+    
+  }
   
   return(c(dd,rttt))
   
